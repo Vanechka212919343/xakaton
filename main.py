@@ -1,67 +1,257 @@
-import pygame
-import subprocess
-import sys
-
-# Инициализация окна и основных настроек
-mainClock = pygame.time.Clock()
+import pygame, sys
+from pygame import mixer
 from pygame.locals import *
-pygame.init()
-pygame.display.set_caption('Игровое меню')
-screen = pygame.display.set_mode((960, 540), 0, 32)
+from fighter import Fighter
 
-# Настройки шрифта
+mixer.init()
+pygame.init()
+
+SCREEN_WIDTH = 1000
+SCREEN_HEIGHT = 600
 font = pygame.font.SysFont(None, 30)
 
-# Загрузка фоновой картинки
-background = pygame.image.load('assests/imgs/menu.png')  # Замените 'path/to/your/image.jpg' на путь к вашей картинке
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Takken-7")
 
-# Загрузка изображения для кнопки "ИГРАТЬ"
-play_button_image = pygame.image.load('assests/imgs/playbutton.png')  # Замените 'path/to/your/button.png' на путь к вашей картинке
+clock = pygame.time.Clock()
+mainClock = pygame.time.Clock()
+FPS = 60
 
-# Загрузка изображения для кнопки "Настройки"
-settings_button_image = pygame.image.load('assests/imgs/settings.png')  # Замените 'path/to/your/settings_button.png' на путь к вашей картинке
+RED = (255, 0, 0)
+YELLOW = (255, 255, 0)
+WHITE = (255, 255, 255)
+
+intro_count = 3
+last_count_update = pygame.time.get_ticks()
+score = [0, 0]
+round_over = False
+ROUND_OVER_COOLDOWN = 2000
+
+WARRIOR_SIZE = 162
+WARRIOR_SCALE = 4
+WARRIOR_OFFSET = [72, 56]
+WARRIOR_DATA = [WARRIOR_SIZE, WARRIOR_SCALE, WARRIOR_OFFSET]
+WIZARD_SIZE = 250
+WIZARD_SCALE = 3
+WIZARD_OFFSET = [112, 107]
+WIZARD_DATA = [WIZARD_SIZE, WIZARD_SCALE, WIZARD_OFFSET]
+MARTIAL_SIZE = 200
+MARTIAL_SCALE = 4
+MARTIAL_OFFSET = [72, 75]
+MARTIAL_DATA = [MARTIAL_SIZE, MARTIAL_SCALE, MARTIAL_OFFSET]
+HUNTER_SIZE = 150
+HUNTER_SCALE = 4.3
+HUNTER_OFFSET = [72, 52]
+HUNTER_DATA = [HUNTER_SIZE, HUNTER_SCALE, HUNTER_OFFSET]
+NECRO_SIZE = 125
+NECRO_SCALE = 4
+NECRO_OFFSET = [72, 40]
+NECRO_DATA = [NECRO_SIZE, NECRO_SCALE, NECRO_OFFSET]
+HERO_SIZE = 180
+HERO_SCALE = 3.6
+HERO_OFFSET = [72, 60]
+HERO_DATA = [HERO_SIZE, HERO_SCALE, HERO_OFFSET]
+
+pygame.mixer.music.load("assets/audio/music1.mp3")
+pygame.mixer.music.set_volume(1)
+pygame.mixer.music.play(-1, 0.0, 5000)
+sword_fx = pygame.mixer.Sound("assets/audio/sword.wav")
+sword_fx.set_volume(0.5)
+magic_fx = pygame.mixer.Sound("assets/audio/magic.wav")
+magic_fx.set_volume(0.75)
+
+bg_image = pygame.image.load("assets/images/background/pixel_art___does_not_think_by_vidreview_df88ngk-fullview.jpg").convert_alpha()
+bg_menu = pygame.image.load("assets/images/background/Background Menu.jpeg").convert_alpha()
+
+warrior_sheet = pygame.image.load("assets/images/warrior/Sprites/warrior.png").convert_alpha()
+wizard_sheet = pygame.image.load("assets/images/wizard/Sprites/wizard.png").convert_alpha()
+martial_sheet = pygame.image.load("assets\images\Martial Hero\Sprites\Merged_document__3_-removebg.png").convert_alpha()
+hunter_sheet = pygame.image.load("assets\images\Huntress\Sprites\Merged_document__4_-removebg.png").convert_alpha()
+necromancer_sheet = pygame.image.load("assets\images\Evil Wizard\Sprites\MergedImages (2).png").convert_alpha()
+hero_sheet = pygame.image.load("assets\images\Hero Knight\MergedImages (1).png").convert_alpha()
+
+victory_img = pygame.image.load("assets/images/icons/victory.png").convert_alpha()
+
+WARRIOR_ANIMATION_STEPS = [10, 8, 1, 7, 7, 3, 7]
+WIZARD_ANIMATION_STEPS = [8, 8, 1, 8, 8, 3, 7]
+MARTIAL_ANIMATION_STEPS = [8, 8, 2, 6, 6, 4, 6]
+HUNTER_ANIMATION_STEPS = [8, 8, 2, 4, 7, 3, 8]
+NECROMANCER_ANIMATION_STEPS = [8, 8, 8, 8, 8, 4, 5]
+HERO_ANIMATION_STEPS = [11, 8, 3, 7, 7, 4, 11]
+
+count_font = pygame.font.Font("assets/fonts/turok.ttf", 80)
+score_font = pygame.font.Font("assets/fonts/turok.ttf", 30)
+
+def draw_text(text, font, text_col, x, y):
+  img = font.render(text, True, text_col)
+  screen.blit(img, (x, y))
+
+def draw_bg():
+  scaled_bg = pygame.transform.scale(bg_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+  screen.blit(scaled_bg, (0, 0))
+
+def draw_health_bar(health, x, y):
+  ratio = health / 100
+  pygame.draw.rect(screen, WHITE, (x - 2, y - 2, 404, 34))
+  pygame.draw.rect(screen, RED, (x, y, 400, 30))
+  pygame.draw.rect(screen, YELLOW, (x, y, 400 * ratio, 30))
+
+def load_images(sprite_sheet, animation_steps, size, image_scale):
+
+    animation_list = []
+    for y, animation in enumerate(animation_steps):
+      temp_img_list = []
+      for x in range(animation):
+        temp_img = sprite_sheet.subsurface(x * size, y * size, size, size)
+        temp_img_list.append(pygame.transform.scale(temp_img, (size * image_scale, size * image_scale)))
+      animation_list.append(temp_img_list)
+    return animation_list
+
+def menu_select(warrior_sheet, wizard_sheet, x, y):
+  warrior_photo = pygame.image.load("assets/images/warrior/Sprites/warrior.png")
+  pygame.draw.rect(screen, RED, (x-2, y-2, 40, 60))
+  screen.blit(warrior_photo, (x - (10 * 4), y - (10 * 4)))
+
+  wizard_photo = pygame.image.load("assets/images/wizard/Sprites/wizard.png")
+  pygame.draw.rect(screen, RED, (x+60-2, y-2, 40, 60))
+  screen.blit(wizard_photo, (x + 40 - (10 * 4), y - (10 * 4)))
+
+fighter_1 = Fighter(1, 200, 310, False, WARRIOR_DATA, warrior_sheet, WARRIOR_ANIMATION_STEPS, sword_fx)
+fighter_2 = Fighter(2, 700, 310, True, WIZARD_DATA, wizard_sheet, WIZARD_ANIMATION_STEPS, magic_fx)
 
 
-# Функция для вывода текста на экране и кнопках
-def draw_text(text, font, color, surface, x, y):
+
+def game(fighter_1, fighter_2, intro_count, last_count_update, round_over):
+  run = True
+  time = 5400
+  while run:
+    Refscore = score[0] + score[1]
+    clock.tick(FPS)
+
+
+    draw_bg()
+
+
+    draw_health_bar(fighter_1.health, 20, 20)
+    draw_health_bar(fighter_2.health, 580, 20)
+
+    if time // 3600 ==1:
+      if time%3600 // 60 < 10:
+        draw_text("Время: 01:0"+ str(time%3600 // 60), score_font, RED, 430, 20)
+      else:
+        draw_text("Время: 01:"+ str(time%3600 // 60), score_font, RED, 430, 20)
+    else:
+      if time%3600 // 60 < 10:
+        draw_text("Время: 00:0"+ str(time%3600 // 60), score_font, RED, 430, 20)
+      else:
+        draw_text("Время: 00:"+ str(time%3600 // 60), score_font, RED, 430, 20)
+    time = time-1
+    if time == 0:
+       run = False
+
+    draw_text("Игрок 1: " + str(score[0]), score_font, RED, 20, 60)
+    draw_text("Игрок 2: " + str(score[1]), score_font, RED, 920, 60)
+
+
+    if intro_count <= 0:
+
+      fighter_1.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_2, round_over)
+      fighter_2.move(SCREEN_WIDTH, SCREEN_HEIGHT, screen, fighter_1, round_over)
+    else:
+
+      draw_text(str(intro_count), count_font, RED, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 3)
+
+      if (pygame.time.get_ticks() - last_count_update) >= 1000:
+        intro_count -= 1
+        last_count_update = pygame.time.get_ticks()
+
+
+    fighter_1.update()
+    fighter_2.update()
+
+
+    fighter_1.draw(screen)
+    fighter_2.draw(screen)
+
+
+    if round_over == False:
+      if fighter_1.alive == False:
+        score[1] += 1
+        round_over = True
+        round_over_time = pygame.time.get_ticks()
+      elif fighter_2.alive == False:
+        score[0] += 1
+        round_over = True
+        round_over_time = pygame.time.get_ticks()
+    else:
+
+      screen.blit(victory_img, (360, 150))
+      if pygame.time.get_ticks() - round_over_time > ROUND_OVER_COOLDOWN:
+        round_over = False
+        intro_count = 3
+        fighter_1 = Fighter(1, 200, 310, False, WARRIOR_DATA, warrior_sheet, WARRIOR_ANIMATION_STEPS, sword_fx)
+        fighter_2 = Fighter(2, 700, 310, True, WIZARD_DATA, wizard_sheet, WIZARD_ANIMATION_STEPS, magic_fx)
+
+
+    for event in pygame.event.get():
+      if event.type == pygame.QUIT:
+        run = False
+
+    for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    run = False
+    if score[0] + score[1] !=  Refscore:
+       time = 5400
+
+    pygame.display.update()
+
+def draw_textt(text, font, color, surface, x, y):
     textobj = font.render(text, 1, color)
     textrect = textobj.get_rect()
     textrect.topleft = (x, y)
     surface.blit(textobj, textrect)
 
-# Переменная для отслеживания действий
-click = False
+def main_menu(fighter_1, fighter_2, intro_count, last_count_update, round_over):
+    fighter = [None, None]
 
-# Основная функция, содержащая кнопки и игровые функции
-def main_menu():
     while True:
-        screen.blit(background, (0, 0))  # Отрисовка фоновой картинки
+
+        scaled_bg = pygame.transform.scale(bg_menu, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        screen.blit(scaled_bg, (0, 0))
+        draw_textt('Главное Меню', score_font, (0,0,0), screen, 420, 150)
 
         mx, my = pygame.mouse.get_pos()
 
-        # Создание кнопки "ИГРАТЬ"
-        button_play = pygame.Rect(160, 115, play_button_image.get_width(), play_button_image.get_height())
 
-        # Создание кнопки "Настройки"
-        button_settings = pygame.Rect(180, 5, settings_button_image.get_width(), settings_button_image.get_height())
+        button_1 = pygame.Rect(230, 294, 120, 50)
+        button_2 = pygame.Rect(400, 294, 250, 50)
 
-        # Определение функции при нажатии на кнопку "ИГРАТЬ"
-        if button_play.collidepoint((mx, my)):
-            # if click:
-            game()
+        if button_1.collidepoint((mx, my)):
+            if click:
+                if fighter[0] == None:
+                  game(fighter_1, fighter_2, intro_count, last_count_update, round_over)
+                else:
+                  game(fighter[0], fighter[1], intro_count, last_count_update, round_over)
 
-        # Определение функции при нажатии на кнопку "Настройки"
-        if button_settings.collidepoint((mx, my)):
-            # if click:
-            options()
+        if button_2.collidepoint((mx, my)):
+            if click:
+                options(intro_count, last_count_update, round_over)
 
-        # Отрисовка изображения на кнопке "ИГРАТЬ"
-        screen.blit(play_button_image, (160, 115))
+        pygame.draw.rect(screen, (255, 0, 0), button_1, width=4, border_radius=10)
+        pygame.draw.rect(screen, (255, 0, 0), button_2, width=4, border_radius=10)
 
-        # Отрисовка изображения на кнопке "Настройки"
-        screen.blit(settings_button_image, (230, 280))
 
-        # Обработка событий
+        draw_textt('Играть', score_font, (0,0,0), screen, 250, 300)
+        draw_textt('Выбрать игрока', score_font, (0,0,0), screen, 420, 300)
+
+        draw_textt('Нажмите ESC, чтобы выйти', score_font, (255,255,255), screen, 320, 555)
+
+
+
         click = False
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -76,14 +266,32 @@ def main_menu():
                     click = True
 
         pygame.display.update()
-        mainClock.tick(60)
+        clock.tick(60)
 
-# Функция вызывается при нажатии кнопки "ИГРАТЬ"
-def game():
+def options(intro_count, last_count_update, round_over):
     running = True
+    step = 1
+    fighter_1 = None
+    fighter_2 = None
     while running:
-        screen.fill((0, 0, 0))
-        draw_text('ИГРОВОЙ ЭКРАН', font, (255, 255, 255), screen, 20, 20)
+        click = False
+
+        scaled_bg = pygame.transform.scale(bg_menu, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        screen.blit(scaled_bg, (0, 0))
+        draw_textt('Настройки экрана', score_font, (255, 255, 255), screen, 400, 40)
+        mx, my = pygame.mouse.get_pos()
+
+        #creating buttons
+        button_1 = pygame.Rect(395, 100, 200, 50)
+        button_2 = pygame.Rect(395, 180, 200, 50)
+        button_3 = pygame.Rect(395, 260, 200, 50)
+        button_4 = pygame.Rect(395, 340, 200, 50)
+        button_5 = pygame.Rect(395, 420, 200, 50)
+        button_6 = pygame.Rect(395, 500, 200, 50)
+
+        if step == 3:
+            game(fighter_1, fighter_2, intro_count, last_count_update, round_over)
+            running = False
         for event in pygame.event.get():
             if event.type == QUIT:
                 pygame.quit()
@@ -91,17 +299,90 @@ def game():
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-       
+            if event.type == MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    click = True
+                    print(click)
+
+        if button_1.collidepoint((mx, my)):
+            if click:
+              if step == 2:
+                step = step + 1
+                fighter_2 = Fighter(2, 700, 310, True, WARRIOR_DATA, warrior_sheet, WARRIOR_ANIMATION_STEPS, sword_fx)
+
+              if step == 1:
+                step = step + 1
+                fighter_1 = Fighter(1, 200, 310, False, WARRIOR_DATA, warrior_sheet, WARRIOR_ANIMATION_STEPS, sword_fx)
+
+        if button_2.collidepoint((mx, my)):
+            if click:
+              if step == 2:
+                step = step + 1
+                fighter_2 = Fighter(2, 700, 310, True, WIZARD_DATA, wizard_sheet, WIZARD_ANIMATION_STEPS, magic_fx)
+
+              if step == 1:
+                step = step + 1
+                fighter_1 = Fighter(1, 200, 310, False, WIZARD_DATA, wizard_sheet, WIZARD_ANIMATION_STEPS, magic_fx)
+
+        if button_3.collidepoint((mx, my)):
+            if click:
+              if step == 2:
+                step = step + 1
+                fighter_2 = Fighter(2, 700, 310, True, MARTIAL_DATA, martial_sheet, MARTIAL_ANIMATION_STEPS, sword_fx)
+
+              if step == 1:
+                step = step + 1
+                fighter_1 = Fighter(1, 200, 310, False, MARTIAL_DATA, martial_sheet, MARTIAL_ANIMATION_STEPS, sword_fx)
+
+        if button_4.collidepoint((mx, my)):
+            if click:
+              if step == 2:
+                step = step + 1
+                fighter_2 = Fighter(2, 700, 310, True, HUNTER_DATA, hunter_sheet, HUNTER_ANIMATION_STEPS, sword_fx)
+
+              if step == 1:
+                step = step + 1
+                fighter_1 = Fighter(1, 200, 310, False, HUNTER_DATA, hunter_sheet, HUNTER_ANIMATION_STEPS, sword_fx)
+
+        if button_5.collidepoint((mx, my)):
+            if click:
+              if step == 2:
+                step = step + 1
+                fighter_2 = Fighter(2, 700, 310, True, NECRO_DATA, necromancer_sheet, NECROMANCER_ANIMATION_STEPS, magic_fx)
+
+              if step == 1:
+                step = step + 1
+                fighter_1 = Fighter(1, 200, 310, False, NECRO_DATA, necromancer_sheet, NECROMANCER_ANIMATION_STEPS, magic_fx)
+
+        if button_6.collidepoint((mx, my)):
+            if click:
+              if step == 2:
+                step = step + 1
+                fighter_2 = Fighter(2, 700, 310, True, HERO_DATA, hero_sheet, HERO_ANIMATION_STEPS, sword_fx)
+
+              if step == 1:
+                step = step + 1
+                fighter_1 = Fighter(1, 200, 310, False, HERO_DATA, hero_sheet, HERO_ANIMATION_STEPS, sword_fx)
+
+        pygame.draw.rect(screen, (255, 0, 0), button_1, width=4, border_radius=10)
+        pygame.draw.rect(screen, (255, 0, 0), button_2, width=4, border_radius=10)
+        pygame.draw.rect(screen, (255, 0, 0), button_3, width=4, border_radius=10)
+        pygame.draw.rect(screen, (255, 0, 0), button_4, width=4, border_radius=10)
+        pygame.draw.rect(screen, (255, 0, 0), button_5, width=4, border_radius=10)
+        pygame.draw.rect(screen, (255, 0, 0), button_6, width=4, border_radius=10)
+
+        draw_textt('Воин', score_font, (255,255,255), screen, 450, 105)
+        draw_textt('Волшебник', score_font, (255,255,255), screen, 450, 185)
+        draw_textt('Герой', score_font, (255,255,255), screen, 410, 265)
+        draw_textt('Охотник', score_font, (255,255,255), screen, 430, 345)
+        draw_textt('Призрак', score_font, (255,255,255), screen, 420, 425)
+        draw_textt('Робот-убийца', score_font, (255,255,255), screen, 430, 505)
+
+        draw_textt('Нажмите ESC для возвращения в меню', score_font, (255,255,255), screen, 380, 555)
+
         pygame.display.update()
-        mainClock.tick(60)
+        clock.tick(60)
 
-# Функция вызывается при нажатии кнопки "ОПЦИИ"
-import os
-import subprocess
+main_menu(fighter_1, fighter_2, intro_count, last_count_update, round_over)
 
-# Функция вызывается при нажатии кнопки "ОПЦИИ"
-def options():
-    subprocess.call(['python', 'options.py'])  # Запускаем options.py из подпапки "options"
-
-# Запуск основного меню
-main_menu()
+pygame.quit()
